@@ -1,0 +1,101 @@
+// server.js - Alternative with multiple endpoints
+const express = require("express");
+const cors = require("cors");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+
+const app = express();
+const PORT = 5000;
+
+app.use(cors({ origin: "*", credentials: true }));
+app.use(express.json({ limit: "100mb" }));
+
+// Create upload directories
+["./uploads", "./uploads/temp", "./uploads/processed"].forEach((dir) => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "./uploads/temp"),
+  filename: (req, file, cb) => {
+    const cleanName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
+    cb(null, `${Date.now()}-${cleanName}`);
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: Infinity },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (file.mimetype === "application/pdf" || ext === ".pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files allowed"), false);
+    }
+  },
+});
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", timestamp: new Date().toISOString() });
+});
+
+// ENDPOINT 1: Accept 'pdf' field name (for regular upload)
+app.post("/api/upload", upload.single("pdf"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: "No file uploaded" });
+  }
+
+  res.json({
+    success: true,
+    file: {
+      originalName: req.file.originalname,
+      filename: req.file.filename,
+      size: req.file.size,
+      sizeMB: (req.file.size / (1024 * 1024)).toFixed(2),
+    },
+  });
+});
+
+// ENDPOINT 2: Accept 'chunk' field name (for chunked upload)
+app.post("/api/upload/chunk", upload.single("chunk"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: "No chunk uploaded" });
+  }
+
+  res.json({
+    success: true,
+    chunk: {
+      filename: req.file.filename,
+      size: req.file.size,
+    },
+  });
+});
+
+// ENDPOINT 3: Accept any field name
+app.post("/api/upload/any", upload.any(), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ success: false, error: "No file uploaded" });
+  }
+
+  const file = req.files[0];
+  res.json({
+    success: true,
+    file: {
+      originalName: file.originalname,
+      filename: file.filename,
+      size: file.size,
+      sizeMB: (file.size / (1024 * 1024)).toFixed(2),
+    },
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📁 Upload endpoints:`);
+  console.log(`   POST /api/upload (field: 'pdf')`);
+  console.log(`   POST /api/upload/chunk (field: 'chunk')`);
+  console.log(`   POST /api/upload/any (any field name)`);
+});
