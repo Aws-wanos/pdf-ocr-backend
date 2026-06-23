@@ -48,13 +48,8 @@ const upload = multer({
 });
 
 // ============================================================
-// GROQ AI SERVICE
+// FALLBACK RESPONSE (No AI)
 // ============================================================
-//const GROQ_API_KEY = ;
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MAX_TEXT_LENGTH = 3000;
-
-// Fallback response when API fails
 const getFallbackResponse = (text, language) => {
   console.log("📚 Returning fallback response");
   return {
@@ -103,137 +98,6 @@ const getFallbackResponse = (text, language) => {
     ],
   };
 };
-console.log("🔑 Using API key:", GROQ_API_KEY ? "✅ Yes" : "❌ No");
-// Generate units using Groq API
-const generateUnits = async (text, language, retryCount = 0) => {
-  const textToSend = text.substring(0, MAX_TEXT_LENGTH);
-
-  const prompt = `
-Create JSON from this text:
-${textToSend}
-
-Language: ${language}
-
-Format:
-{
-  "courseTitle": "title",
-  "units": [{
-    "id": 1,
-    "title": "Unit 1",
-    "description": "Description",
-    "lessons": [{
-      "id": 1,
-      "title": "Lesson 1",
-      "content": "Lesson content",
-      "vocabulary": [{"word": "word", "meaning": "meaning"}],
-      "grammar": [{"rule": "rule", "explanation": "explanation"}]
-    }],
-    "quiz": {
-      "questions": [{"question": "Q?", "options": ["A","B","C","D"], "answer": 0}]
-    },
-    "funFact": "fun fact"
-  }]
-}
-
-ONLY JSON. No other text.`;
-
-  try {
-    console.log(`🔄 Sending request to Groq (attempt ${retryCount + 1})...`);
-
-    const response = await axios.post(
-      GROQ_URL,
-      {
-        model: "llama-3.1-8b-instant",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a JSON generator. Output ONLY valid JSON. Never output any other text.",
-          },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.1,
-        max_tokens: 3000,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 60000,
-      },
-    );
-
-    const content = response.data.choices[0].message.content;
-
-    let jsonString = content.replace(/```json/g, "").replace(/```/g, "");
-    const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonString = jsonMatch[0];
-    }
-
-    jsonString = jsonString
-      .replace(/,\s*}/g, "}")
-      .replace(/,\s*\]/g, "]")
-      .replace(/—/g, "-")
-      .replace(/’/g, "'")
-      .replace(/“/g, '"')
-      .replace(/”/g, '"')
-      .trim();
-
-    const result = JSON.parse(jsonString);
-
-    if (!result.units || result.units.length === 0) {
-      result.units = [
-        {
-          id: 1,
-          title: "Course Content",
-          description: "Content from the text",
-          lessons: [
-            {
-              id: 1,
-              title: "Main Lesson",
-              content: textToSend.substring(0, 500),
-              vocabulary: [],
-              grammar: [],
-            },
-          ],
-          quiz: {
-            questions: [
-              {
-                question: "What did you learn from this text?",
-                options: [
-                  "The main idea",
-                  "A detail",
-                  "A summary",
-                  "All of the above",
-                ],
-                answer: 0,
-              },
-            ],
-          },
-          funFact: "Learning new content every day!",
-        },
-      ];
-    }
-
-    console.log(`✅ Generated ${result.units.length} units`);
-    return result;
-  } catch (error) {
-    console.error("❌ Groq API Error:", error.message);
-
-    if (error.response?.status === 429 && retryCount < 3) {
-      const waitTime = (retryCount + 1) * 8000;
-      console.log(
-        `⏳ Rate limited. Waiting ${waitTime / 1000}s before retry...`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-      return generateUnits(text, language, retryCount + 1);
-    }
-
-    return getFallbackResponse(text, language);
-  }
-};
 
 // ============================================================
 // API ENDPOINTS
@@ -247,7 +111,7 @@ app.get("/api/health", (req, res) => {
     uptime: process.uptime(),
     services: {
       upload: "✅ Ready",
-      groq: GROQ_API_KEY ? "✅ Configured" : "❌ Missing API Key",
+      ai: "⏳ Coming Soon (YandexGPT)",
     },
   });
 });
@@ -307,9 +171,7 @@ app.post("/api/upload/any", upload.any(), (req, res) => {
   });
 });
 
-// ----- AI GENERATION ENDPOINTS -----
-
-// Generate course from text
+// ----- AI GENERATION ENDPOINT (Coming Soon) -----
 app.post("/api/generate", async (req, res) => {
   try {
     const { text, language } = req.body;
@@ -335,112 +197,28 @@ app.post("/api/generate", async (req, res) => {
       });
     }
 
-    if (!GROQ_API_KEY) {
-      console.warn("⚠️ No GROQ_API_KEY found, using fallback mode");
-      const fallbackResult = getFallbackResponse(text, language);
-      return res.json({
-        success: true,
-        data: fallbackResult,
-        stats: {
-          textLength: text.length,
-          unitsGenerated: fallbackResult.units?.length || 0,
-          mode: "fallback",
-        },
-      });
-    }
-
     console.log(`📚 Generating course for ${language} (${text.length} chars)`);
+    console.log("⏳ AI Teacher coming soon with YandexGPT!");
 
-    const result = await generateUnits(text, language);
-
-    res.json({
+    // Return fallback for now
+    const fallbackResult = getFallbackResponse(text, language);
+    return res.json({
       success: true,
-      data: result,
+      data: fallbackResult,
       stats: {
         textLength: text.length,
-        unitsGenerated: result.units?.length || 0,
-        mode: "api",
+        unitsGenerated: fallbackResult.units?.length || 0,
+        mode: "fallback",
+        message: "AI Teacher coming soon with YandexGPT! 🚀",
       },
     });
   } catch (error) {
-    console.error("❌ AI Generation Error:", error);
-
-    // Try fallback
-    try {
-      const { text, language } = req.body;
-      const fallbackResult = getFallbackResponse(text, language);
-      return res.json({
-        success: true,
-        data: fallbackResult,
-        stats: {
-          textLength: text?.length || 0,
-          unitsGenerated: fallbackResult.units?.length || 0,
-          mode: "fallback",
-        },
-      });
-    } catch (fallbackError) {
-      res.status(500).json({
-        success: false,
-        error: error.message || "AI generation failed",
-      });
-    }
-  }
-});
-
-// Test Groq API connection
-app.get("/api/ai/test", async (req, res) => {
-  try {
-    if (!GROQ_API_KEY) {
-      return res.json({
-        success: false,
-        error: "GROQ_API_KEY not configured",
-      });
-    }
-
-    const response = await axios.post(
-      GROQ_URL,
-      {
-        model: "llama-3.1-8b-instant",
-        messages: [
-          {
-            role: "user",
-            content: "Say 'Connection successful!' in one sentence.",
-          },
-        ],
-        max_tokens: 20,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 10000,
-      },
-    );
-
-    res.json({
-      success: true,
-      message: response.data.choices[0].message.content,
-    });
-  } catch (error) {
-    res.json({
+    console.error("❌ Error:", error);
+    res.status(500).json({
       success: false,
-      error: error.response?.data?.error?.message || error.message,
+      error: error.message || "Generation failed",
     });
   }
-});
-
-// Get AI service status
-app.get("/api/ai/status", (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      configured: !!GROQ_API_KEY,
-      model: GROQ_API_KEY ? "llama-3.1-8b-instant" : null,
-      maxTextLength: MAX_TEXT_LENGTH,
-      status: GROQ_API_KEY ? "ready" : "missing_api_key",
-    },
-  });
 });
 
 // ============================================================
@@ -478,11 +256,9 @@ app.listen(PORT, () => {
   console.log(`🚀 Unified Server running on http://localhost:${PORT}`);
   console.log("========================================");
   console.log(`📤 PDF Upload:    POST /api/upload`);
-  console.log(`📚 AI Generate:   POST /api/generate`);
+  console.log(`📚 AI Generate:   POST /api/generate (Coming Soon)`);
   console.log(`✅ Health Check:  GET  /api/health`);
-  console.log(
-    `🔗 Groq API:      ${GROQ_API_KEY ? "✅ Configured" : "❌ Missing"}`,
-  );
   console.log(`🌐 CORS enabled:  *`);
   console.log("========================================");
+  console.log("⏳ AI Teacher coming soon with YandexGPT!");
 });
