@@ -50,7 +50,7 @@ const upload = multer({
 // ============================================================
 // GROQ AI SERVICE
 // ============================================================
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+//const GROQ_API_KEY = ;
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MAX_TEXT_LENGTH = 3000;
 
@@ -103,7 +103,7 @@ const getFallbackResponse = (text, language) => {
     ],
   };
 };
-
+console.log("🔑 Using API key:", GROQ_API_KEY ? "✅ Yes" : "❌ No");
 // Generate units using Groq API
 const generateUnits = async (text, language, retryCount = 0) => {
   const textToSend = text.substring(0, MAX_TEXT_LENGTH);
